@@ -1,0 +1,24 @@
+{
+    "name": "jsl/models",
+    "description": "Kind of active records for jsl/database",
+    "type": "library",
+    "minimum-stability": "stable",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Magnus Eriksson",
+            "email": "mange@reloop.se"
+        }
+    ],
+    "autoload": {
+        "files": [
+            "./src/functions.php"
+        ],
+        "psr-4": {
+            "Jsl\\Models\\": "src/"
+        }
+    },
+    "require": {
+        "jsl/database": "^2.6"
+    }
+}
