@@ -12,7 +12,7 @@
     ],
     "autoload": {
         "files": [
-            "./src/functions.php"
+            "./src/Components/functions.php"
         ],
         "psr-4": {
             "Jsl\\Models\\": "src/"

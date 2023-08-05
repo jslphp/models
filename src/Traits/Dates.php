@@ -3,17 +3,20 @@
 namespace Jsl\Models\Traits;
 
 use DateTime;
+use Jsl\Models\Attributes\Column;
 
 trait Dates
 {
     /**
      * @var DateTime|null
      */
+    #[Column(isCreatedAt: true)]
     public ?DateTime $createdAt = null;
 
     /**
      * @var DateTime|null
      */
+    #[Column(isUpdatedAt: true)]
     public ?DateTime $updatedAt = null;
 
 

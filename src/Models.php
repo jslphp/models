@@ -2,83 +2,88 @@
 
 namespace Jsl\Models;
 
-use Exception;
 use Jsl\Database\ConnectionInterface;
+use Jsl\Models\Components\Attributes;
+use Jsl\Models\Schema\Model;
 
 class Models
 {
-    protected const DEFAULT_CONNECTION_KEY = '__default__';
-
     /**
-     * @var array<ConnectionInterface>
+     * @var ?ConnectionInterface
      */
-    protected static array $connections = [];
+    protected ?ConnectionInterface $connection = null;
 
     /**
-     * @var array
+     * @var Attributes
      */
-    protected static array $models = [];
+    protected Attributes $attributes;
+
+    /**
+     * @var array<Model>
+     */
+    protected array $models = [];
+
+
+    public function __construct()
+    {
+        $this->attributes = new Attributes;
+    }
 
 
     /**
-     * Set the default connection
-     *
+     * Set the connection for the models
+     * 
      * @param ConnectionInterface $connection
-     * @param string $model If empty, it will set the default connection
      *
-     * @return void
+     * @return self
      */
-    public static function setConnection(ConnectionInterface $connection, string $model = ''): void
+    public function setConnection(ConnectionInterface $connection): self
     {
-        static::$connections[$model ?: self::DEFAULT_CONNECTION_KEY] = $connection;
+        $this->connection = $connection;
+
+        return $this;
     }
 
 
     /**
-     * Get a connection for a model
-     *
-     * @param string $model
-     *
-     * @return ConnectionInterface
-     */
-    public static function getConnection(string $model): ConnectionInterface
-    {
-        if (key_exists($model, static::$connections)) {
-            return static::$connections[$model];
-        }
-
-        if (key_exists(static::DEFAULT_CONNECTION_KEY, static::$connections) === false) {
-            throw new Exception("Model {$model} has no specific connection and no default is set");
-        }
-
-        return static::$connections[static::DEFAULT_CONNECTION_KEY];
-    }
-
-
-    /**
-     * Check if a model has a connection
-     *
-     * @param string|object $model If empty, it will check for a default connection
+     * Check if a connection is already set
      *
      * @return bool
      */
-    public static function hasConnection(string $model = ''): bool
+    public function hasConnection(): bool
     {
-        return key_exists($model ?: static::DEFAULT_CONNECTION_KEY, static::$connections);
+        return $this->connection !== null;
     }
 
 
     /**
-     * Get model columns
+     * Get the connection
      *
-     * @param string|object $model
-     *
-     * @return array
+     * @return ConnectionInterface|null
      */
-    public static function getColumns(string|object $model): array
+    public function getConnection(): ?ConnectionInterface
     {
-        $name = is_object($model) ? $model::class : $model;
+        return $this->connection;
+    }
 
-        return static::$models[$name] ??= getPublicProperties($model);
+
+    /**
+     * Get a model
+     *
+     * @param string $modelClass
+     *
+     * @return Model|null
+     */
+    public function get(string $modelClass): ?Model
+    {
+        if (key_exists($modelClass, $this->models)) {
+            return $this->models[$modelClass];
+        }
+
+        if ($model = $this->attributes->fromModel($modelClass)) {
+            $this->models[$modelClass] = $model;
+        }
+
+        return $model;
     }
 }

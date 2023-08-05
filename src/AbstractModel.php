@@ -2,12 +2,15 @@
 
 namespace Jsl\Models;
 
-use DateTime;
 use DateTimeInterface;
-use DateTimeZone;
+use Exception;
 use Jsl\Database\Collections\Paginate;
 use Jsl\Database\Query\Builder;
 use JsonSerializable;
+
+use function Jsl\Models\Components\db;
+use function Jsl\Models\Components\model;
+use function Jsl\Models\Components\tzDate;
 
 abstract class AbstractModel implements JsonSerializable
 {
@@ -21,54 +24,18 @@ abstract class AbstractModel implements JsonSerializable
 
 
     /**
-     * Get the model's table name
-     *
-     * @return string
-     */
-    abstract public static function table(): string;
-
-
-    /**
-     * The default ORDER BY for queries
-     *
-     * @return array
-     */
-    public static function defaultOrderBy(): array
-    {
-        return [];
-    }
-
-
-    /**
-     * Get the primary key
-     *
-     * @return string
-     */
-    public static function primaryKey(): string
-    {
-        return 'id';
-    }
-
-
-    /**
      * Get a query builder
      *
      * @return Builder
      */
     public static function query(): Builder
     {
-        $query = connection(static::class)
-            ->table(static::table())
-            ->model(static::class);
+        $model = model(static::class);
 
-        foreach (static::defaultOrderBy() as $column => $diraction) {
-            $query->orderBy($column, $diraction);
-        }
+        $query = db()->table($model->table)->model($model->model);
 
-        $props = getPublicProperties(static::class);
-
-        if (key_exists('deletedAt', $props)) {
-            $query->whereNull('deletedAt');
+        if ($prop = $model->softDelete) {
+            $query->whereNull($prop->column);
         }
 
         return $query;
@@ -85,7 +52,16 @@ abstract class AbstractModel implements JsonSerializable
      */
     public static function find(string|int $identifier, ?string $column = null): ?static
     {
-        return static::query()->find(id: $identifier, column: $column);
+        $model = model(static::class);
+
+        if ($model->primaryKey === null) {
+            throw new Exception("No column set and no primary key defined for the model");
+        }
+
+        return static::query()->find(
+            id: $identifier,
+            column: $column ?? $model->primaryKey->column
+        );
     }
 
 
@@ -123,15 +99,18 @@ abstract class AbstractModel implements JsonSerializable
      */
     public static function create(array $data): ?AbstractModel
     {
-        $remove = [static::primaryKey(), 'createdAt', 'updatedAt', 'deletedAt'];
+        $model = model(static::class);
+        $parsedData = [];
 
-        foreach ($remove as $key) {
-            if (key_exists($key, $data)) {
-                unset($data[$key]);
+        foreach ($data as $key => $value) {
+            $property = $model->property($key);
+
+            if ($property?->isSystemProperty() === false) {
+                $parsedData[$property->column] = $value;
             }
         }
 
-        $model = new static($data);
+        $model = new static($parsedData);
 
         return $model->save() ? $model : null;
     }
@@ -146,10 +125,12 @@ abstract class AbstractModel implements JsonSerializable
      */
     public function replace(array $data): self
     {
-        $props = getPublicProperties(static::class);
+        $model = model($this);
 
         foreach ($data as $key => $value) {
-            if (key_exists($key, $props) && $this->primaryKey() !== $key) {
+            $property = $model->property($key);
+
+            if ($property?->isSystemProperty() === false) {
                 $this->{$key} = $value;
             }
         }
@@ -161,45 +142,63 @@ abstract class AbstractModel implements JsonSerializable
     /**
      * Save the current model
      *
-     * @return bool
+     * @return bool It will return false on updates if no data was changed (and no updatedAt field is defined)
      */
     public function save(): bool
     {
-        $primaryKey = $this->primaryKey();
-        $primaryValue = $primaryKey ? $this->{$primaryKey} : null;
-        $data = getPublicProperties($this);
+        $model = model($this);
+        $key = $model->primaryKey;
+        $data = [];
+        $isNew = $key === null || empty($this->{$key->name});
 
-        if (key_exists($primaryKey, $data)) {
-            unset($data[$primaryKey]);
-        }
-
-        if (key_exists('deletedAt', $data)) {
-            unset($data['deletedAt']);
-        }
-
-        $dates = ['createdAt', 'updatedAt'];
-        foreach ($dates as $key) {
-            if (property_exists($this, $key) && $this->{$key} === null) {
-                $data[$key] = tzDate();
-            }
-        }
-
-        if ($primaryValue === null) {
-            $id = static::query()->insertGetId($data);
-
-            if ($id) {
-                $this->replaceAll(static::find($id, $primaryKey)->toArray());
+        // If primary key is missing or empty, do an insert
+        if ($isNew === true) {
+            foreach ($model->properties as $property) {
+                if ($property->isSystemProperty() === false) {
+                    $data[$property->column] = $this->{$property->name};
+                }
             }
 
-            return $this->{$primaryKey} !== null;
+            if ($model->createdAt) {
+                $data[$model->createdAt->column] = tzDate();
+            }
+
+            if ($model->updatedAt) {
+                $data[$model->updatedAt->column] = tzDate();
+            }
+
+            $stmt = static::query()->insert($data);
+
+            if ($stmt->rowCount() === 0) {
+                return false;
+            }
+
+            // Update the current model with any auto generated data from the database
+            if ($key && $id = db()->lastInsertId()) {
+                $this->replaceAll(static::find($id, $key->column)->toArray());
+            } else {
+                $this->replaceAll($data);
+            }
+
+            return true;
         }
 
+        // We have a primary key defined and set, so let's do an update
+        if ($isNew === false) {
+            foreach ($model->properties as $property) {
+                if ($property->isSystemProperty() === false) {
+                    $data[$property->column] = $this->{$property->name};
+                }
+            }
 
-        $stmt = static::query()
-            ->where($primaryKey, $primaryValue)
-            ->update($data);
+            if ($model->updatedAt) {
+                $data[$model->updatedAt->column] = $this->{$model->updatedAt->name} = tzDate();
+            }
 
-        return $stmt->rowCount() > 0;
+            $stmt = static::query()->where($key->column, $this->{$key->name})->update($data);
+
+            return $stmt->rowCount() > 0;
+        }
     }
 
 
@@ -210,26 +209,23 @@ abstract class AbstractModel implements JsonSerializable
      */
     public function delete(): bool
     {
-        $primaryKey = $this->primaryKey();
-        $primaryValue = $primaryKey ? $this->{$primaryKey} : null;
+        $model = model($this);
+        $key = $model->primaryKey;
 
-        if ($primaryValue === null) {
-            return true;
+        if ($key === null || empty($this->{$key->name})) {
+            throw new Exception("Only models with defined and set primary keys can be deleted");
         }
 
-        $query = static::query()->where($primaryKey, $primaryValue)
+        $query = static::query()->where($key->column, $this->{$key->name})
             ->limit(1);
 
-        property_exists($this, 'deletedAt')
+        $model->softDelete
             ? $query->update(['deletedAt' => tzDate()])
             : $query->delete();
 
-
-        if (static::find($primaryValue, $primaryKey)) {
+        if (static::find($this->{$key->name}, $key->column)) {
             return false;
         }
-
-        $this->replaceAll(getPublicProperties(static::class));
 
         return true;
     }
@@ -242,7 +238,14 @@ abstract class AbstractModel implements JsonSerializable
      */
     public function toArray(): array
     {
-        return getPublicProperties($this);
+        $model = model($this);
+
+        $data = [];
+        foreach ($model->properties as $property => $_) {
+            $data[$property] = $this->{$property};
+        }
+
+        return $data;
     }
 
 
@@ -272,27 +275,31 @@ abstract class AbstractModel implements JsonSerializable
      */
     protected function replaceAll(array $data): self
     {
-        $primaryKey = $this->primaryKey();
+        $model = model($this);
+        $key = $model->primaryKey;
 
-        if (key_exists($primaryKey, $data)) {
-            $this->{$primaryKey} = $data[$primaryKey];
+        if ($key && key_exists($key->name, $data)) {
+            $this->{$key->name} = $data[$key->name];
         }
 
-        $dates = ['createdAt', 'updatedAt'];
+        $newData = [];
+        foreach ($data as $prop => $value) {
+            $property = $model->property($prop);
+            $property = $property ?: $model->column($prop);
 
-        foreach ($dates as $key) {
-            if (key_exists($key, $data) === false) {
+            if ($property === null) {
                 continue;
             }
 
-            if (property_exists($this, $key) && $data[$key]) {
-                $this->{$key} = new DateTime($data[$key], new DateTimeZone('UTC'));
+            if ($property->isDate() && $value) {
+                $this->{$property->name} = tzDate($value, 'UTC');
+                continue;
             }
 
-            unset($data[$key]);
+            $newData[$property->name] = $value;
         }
 
-        $this->replace($data);
+        $this->replace($newData);
 
         return $this;
     }

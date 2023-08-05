@@ -1,10 +1,12 @@
 <?php
 
-namespace Jsl\Models;
+namespace Jsl\Models\Components;
 
 use DateTime;
 use DateTimeZone;
 use Jsl\Database\ConnectionInterface;
+use Jsl\Models\Models;
+use Jsl\Models\Schema\Model;
 
 
 /**
@@ -14,25 +16,35 @@ use Jsl\Database\ConnectionInterface;
  *
  * @return ConnectionInterface
  */
-function connection(string|object $model): ConnectionInterface
+function db(): ConnectionInterface
 {
-    $model = is_string($model) ? $model : $model::class;
-    return Models::getConnection($model);
+    return models()->getConnection();
 }
 
 
 /**
- * Get a models public class or object properties
+ * Get the models instance
  *
- * @param string|object $classOrObject
- *
- * @return array
+ * @return Models
  */
-function getPublicProperties(string|object $classOrObject): array
+function models(): Models
 {
-    return is_object($classOrObject)
-        ? get_object_vars($classOrObject)
-        : get_class_vars($classOrObject);
+    static $models;
+    return $models ??= new Models;
+}
+
+
+/**
+ * Get a model
+ *
+ * @param string|object $model
+ *
+ * @return Model|null
+ */
+function model(string|object $model): ?Model
+{
+    $model = is_object($model) ? $model::class : $model;
+    return models()->get($model);
 }
 
 
