@@ -11,7 +11,7 @@ class Models
     /**
      * @var ?ConnectionInterface
      */
-    protected ?ConnectionInterface $connection = null;
+    protected static ?ConnectionInterface $connection = null;
 
     /**
      * @var Attributes
@@ -34,15 +34,12 @@ class Models
      * Set the connection for the models
      * 
      * @param ConnectionInterface $connection
-     *
-     * @return self
      */
-    public function setConnection(ConnectionInterface $connection): self
+    public static function setConnection(ConnectionInterface $connection): void
     {
-        $this->connection = $connection;
-
-        return $this;
+        static::$connection = $connection;
     }
+
 
 
     /**
@@ -50,9 +47,9 @@ class Models
      *
      * @return bool
      */
-    public function hasConnection(): bool
+    public static function hasConnection(): bool
     {
-        return $this->connection !== null;
+        return static::$connection !== null;
     }
 
 
@@ -63,7 +60,7 @@ class Models
      */
     public function getConnection(): ?ConnectionInterface
     {
-        return $this->connection;
+        return static::$connection;
     }
 
 

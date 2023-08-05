@@ -8,9 +8,10 @@ use Jsl\Database\Collections\Paginate;
 use Jsl\Database\Query\Builder;
 use JsonSerializable;
 
-use function Jsl\Models\Components\db;
-use function Jsl\Models\Components\model;
-use function Jsl\Models\Components\tzDate;
+use function Jsl\Models\db;
+use function Jsl\Models\model;
+use function Jsl\Models\query;
+use function Jsl\Models\tzDate;
 
 abstract class AbstractModel implements JsonSerializable
 {
@@ -30,15 +31,7 @@ abstract class AbstractModel implements JsonSerializable
      */
     public static function query(): Builder
     {
-        $model = model(static::class);
-
-        $query = db()->table($model->table)->model($model->model);
-
-        if ($prop = $model->softDelete) {
-            $query->whereNull($prop->column);
-        }
-
-        return $query;
+        return query(static::class);
     }
 
 
