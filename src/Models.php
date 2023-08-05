@@ -58,16 +58,13 @@ class Models
     /**
      * Check if a model has a connection
      *
-     * @param string|object $model
+     * @param string|object $model If empty, it will check for a default connection
      *
      * @return bool
      */
-    public static function hasConnection(string|object $model): bool
+    public static function hasConnection(string $model = ''): bool
     {
-        $model = is_object($model) ? $model::class : $model;
-
-        return key_exists($model, static::$connections) !== false
-            || key_exists(static::DEFAULT_CONNECTION_KEY, static::$connections);
+        return key_exists($model ?: static::DEFAULT_CONNECTION_KEY, static::$connections);
     }
 
 

@@ -4,8 +4,6 @@ namespace Jsl\Models\Traits;
 
 use DateTime;
 
-use function Jsl\Models\tzDate;
-
 trait Dates
 {
     /**
