@@ -2,6 +2,7 @@
 
 namespace Jsl\Models;
 
+use Closure;
 use Jsl\Database\ConnectionInterface;
 use Jsl\Models\Components\Attributes;
 use Jsl\Models\Schema\Model;
@@ -9,9 +10,9 @@ use Jsl\Models\Schema\Model;
 class Models
 {
     /**
-     * @var ?ConnectionInterface
+     * @var callable|ConnectionInterface|null
      */
-    protected static ?ConnectionInterface $connection = null;
+    protected static Closure|string|ConnectionInterface|null $connection = null;
 
     /**
      * @var Attributes
@@ -33,9 +34,9 @@ class Models
     /**
      * Set the connection for the models
      * 
-     * @param ConnectionInterface $connection
+     * @param callable|ConnectionInterface $connection
      */
-    public static function setConnection(ConnectionInterface $connection): void
+    public static function setConnection(callable|ConnectionInterface $connection): void
     {
         static::$connection = $connection;
     }
@@ -60,6 +61,10 @@ class Models
      */
     public function getConnection(): ?ConnectionInterface
     {
+        if (is_callable(static::$connection) && static::$connection instanceof ConnectionInterface === false) {
+            static::$connection = call_user_func(static::$connection);
+        }
+
         return static::$connection;
     }
 
